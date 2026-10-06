@@ -1,30 +1,27 @@
 """Telegram interface for the BTC/USDT trading bot.
 
-This version is DEMO/analysis-only. It does not place exchange orders.
-Secrets must be provided through environment variables and never committed.
+Demo/analysis-only mode. No exchange orders are placed.
+Runs a tiny HTTP health server so the app can be deployed as a Render Web Service.
 """
 
 import os
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from threading import Thread
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
 
 class HealthHandler(BaseHTTPRequestHandler):
-    """Minimal HTTP health endpoint for Render Web Service."""
-
     def do_GET(self):
         if self.path in ("/", "/health"):
-            body = b'{"status":"ok","mode":"demo","execution":"disabled"}'
+            body = b"OK"
             self.send_response(200)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
             return
-
         self.send_response(404)
         self.end_headers()
 
@@ -35,10 +32,9 @@ class HealthHandler(BaseHTTPRequestHandler):
 def start_health_server():
     port = int(os.getenv("PORT", "10000"))
     server = ThreadingHTTPServer(("0.0.0.0", port), HealthHandler)
-    thread = Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     print(f"Health server listening on 0.0.0.0:{port}")
-    return server
 
 
 def build_keyboard() -> InlineKeyboardMarkup:
@@ -87,47 +83,27 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     responses = {
         "price": "📊 BTC Price\n\nDemo mode — price feed not connected yet.",
-        "settings": (
-            "⚙️ Settings\n\n"
-            "Leverage hard limit: 20x\n"
-            "Risk per trade: 0.5%\n"
-            "Minimum RR: 1:2"
-        ),
-        "long": (
-            "🟢 LONG selected\n\n"
-            "DEMO ONLY — no real order was sent.\n"
-            "Signal validation + Risk Engine must pass before any future execution."
-        ),
-        "short": (
-            "🔴 SHORT selected\n\n"
-            "DEMO ONLY — no real order was sent.\n"
-            "Signal validation + Risk Engine must pass before any future execution."
-        ),
+        "settings": "⚙️ Settings\n\nLeverage hard limit: 20x\nRisk per trade: 0.5%\nMinimum RR: 1:2",
+        "long": "🟢 LONG selected\n\nDEMO ONLY — no real order was sent.\nSignal validation + Risk Engine are required.",
+        "short": "🔴 SHORT selected\n\nDEMO ONLY — no real order was sent.\nSignal validation + Risk Engine are required.",
         "trades": "📋 Open Trades\n\nNo real open trades.",
         "history": "📈 History\n\nNo trades yet.",
         "stop": "⛔ Trading stopped.\n\nReal execution is disabled.",
     }
-
-    await query.edit_message_text(
-        responses.get(query.data, "Unknown command.")
-    )
+    await query.edit_message_text(responses.get(query.data, "Unknown command."))
 
 
 def main():
     token = os.getenv("BOT_TOKEN")
     if not token:
         raise RuntimeError("BOT_TOKEN is missing")
-
     start_health_server()
-
     app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CallbackQueryHandler(button_handler))
-
     print("BTC Telegram Bot V1 started in DEMO mode...")
     app.run_polling()
 
