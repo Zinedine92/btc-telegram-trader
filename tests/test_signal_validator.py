@@ -2,7 +2,7 @@
 
 import unittest
 
-from signal.signal_validator import Signal, SignalValidator
+from validation.signal_validator import Signal, SignalValidator
 
 
 class SignalValidatorTests(unittest.TestCase):
