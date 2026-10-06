@@ -1,7 +1,7 @@
-"""Safe Binance credential loader.
+"""Safe exchange credential loader.
 
-This module only reads credentials from environment variables.
-It does not connect to Binance and cannot place orders.
+Credentials are read only from environment variables. This module does not
+connect to Binance, place orders, cancel orders, or withdraw funds.
 """
 
 import os
