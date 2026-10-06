@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
+from binance_balance import get_btc_usdt_balances
 from market_data import get_btcusdt_price, get_btcusdt_candles
 from strategy import analyze
 from risk_gate import evaluate_analysis
@@ -74,6 +75,24 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Execution: DISABLED\n"
         "Risk Engine: REQUIRED BEFORE EXECUTION"
     )
+
+
+async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        balances = get_btc_usdt_balances()
+        btc = balances.get("BTC", {"free": 0.0, "locked": 0.0})
+        usdt = balances.get("USDT", {"free": 0.0, "locked": 0.0})
+        await update.message.reply_text(
+            "💰 BINANCE BALANCE\n\n"
+            f"BTC\nFree: {btc['free']:.8f}\nLocked: {btc['locked']:.8f}\n\n"
+            f"USDT\nFree: {usdt['free']:.2f}\nLocked: {usdt['locked']:.2f}\n\n"
+            "🔒 READ-ONLY — no orders, transfers, or withdrawals."
+        )
+    except Exception as exc:
+        await update.message.reply_text(
+            f"⚠️ Balance unavailable: {type(exc).__name__}.\n"
+            "No order was placed."
+        )
 
 
 async def riskcheck_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -177,6 +196,7 @@ def main():
     app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("status", status))
+    app.add_handler(CommandHandler("balance", balance_command))
     app.add_handler(CommandHandler("price", price_command))
     app.add_handler(CommandHandler("analysis", analysis_command))
     app.add_handler(CommandHandler("riskcheck", riskcheck_command))
