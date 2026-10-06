@@ -1,16 +1,30 @@
-"""Binance client configuration.
-Credentials are loaded only from environment variables.
+"""Binance exchange client configuration.
+
+Credentials are loaded ONLY from environment variables.
 No secrets are stored in source code.
+No secrets are printed to logs or console.
+Real trading is disabled by design.
 """
 
 import os
 
 
 def get_binance_credentials():
-    api_key = os.getenv(fTSbZQrmyQjXpBc9Afh7PAxZ9YXIe0PX2wkQGrzOLIh26IM4vYcw1ywjOaLjNrpR)
-    api_secret = os.getenv(ixKhcalYIfkhm1DAfrBlsBJy1rjwp1oxQu08eAihjzwh0FYOw82Qgm4BBrVLTq4w)
+    """Load Binance API credentials from environment variables only.
+    
+    Returns:
+        tuple: (api_key, api_secret)
+        
+    Raises:
+        RuntimeError: If credentials are not set in environment variables.
+    """
+    api_key = os.getenv("BINANCE_API_KEY")
+    api_secret = os.getenv("BINANCE_API_SECRET")
 
     if not api_key or not api_secret:
-        raise RuntimeError("Binance API credentials are not configured.")
+        raise RuntimeError(
+            "Binance API credentials are not configured. "
+            "Set BINANCE_API_KEY and BINANCE_API_SECRET environment variables."
+        )
 
     return api_key, api_secret
