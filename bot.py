@@ -12,6 +12,7 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Cont
 
 from market_data import get_btcusdt_price, get_btcusdt_candles
 from strategy import analyze
+from risk_gate import evaluate_analysis
 
 
 class HealthHandler(BaseHTTPRequestHandler):
@@ -73,6 +74,36 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Execution: DISABLED\n"
         "Risk Engine: REQUIRED BEFORE EXECUTION"
     )
+
+
+async def riskcheck_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: /riskcheck <equity_usdt> [leverage]\n"
+            "Example: /riskcheck 1000 20\n"
+            "This is a dry risk check only; no order is sent."
+        )
+        return
+    try:
+        equity = float(context.args[0])
+        leverage = int(context.args[1]) if len(context.args) > 1 else 20
+        analysis = analyze(get_btcusdt_candles(interval="1h", limit=100))
+        approved, message, result = evaluate_analysis(analysis, equity, leverage)
+        if result is None:
+            await update.message.reply_text(f"🛡️ RISK CHECK\n\n{message}")
+            return
+        details = (
+            f"\nRisk amount: {result.risk_amount:.2f} USDT"
+            f"\nPosition size: {result.position_size:.6f} BTC"
+            f"\nReward/Risk: {result.reward_risk:.2f}"
+            f"\nStop distance: {result.stop_distance_pct:.2f}%"
+        )
+        await update.message.reply_text(
+            f"🛡️ RISK CHECK\n\n{message}{details}\n\n"
+            "⚠️ DRY RUN ONLY — execution is disabled."
+        )
+    except (ValueError, TypeError):
+        await update.message.reply_text("⚠️ Invalid equity/leverage. Example: /riskcheck 1000 20")
 
 
 async def analysis_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -148,6 +179,7 @@ def main():
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("price", price_command))
     app.add_handler(CommandHandler("analysis", analysis_command))
+    app.add_handler(CommandHandler("riskcheck", riskcheck_command))
     app.add_handler(CallbackQueryHandler(button_handler))
     print("BTC Telegram Bot V1 started in DEMO mode...")
     app.run_polling()
