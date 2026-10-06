@@ -10,7 +10,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
-from market_data import get_btcusdt_price
+from market_data import get_btcusdt_price, get_btcusdt_candles
+from strategy import analyze
 
 
 class HealthHandler(BaseHTTPRequestHandler):
@@ -74,6 +75,26 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def analysis_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        result = analyze(get_btcusdt_candles(interval="1h", limit=100))
+        if result.bias == "NO_TRADE":
+            await update.message.reply_text(
+                "🟡 BTC/USDT ANALYSIS\n\nDecision: NO TRADE\n"
+                f"Reason: {result.reason}\nMode: READ-ONLY / DEMO"
+            )
+            return
+        await update.message.reply_text(
+            "📈 BTC/USDT ANALYSIS\n\n"
+            f"Bias: {result.bias}\nScore: {result.score:.0f}/100\n"
+            f"Entry reference: {result.entry}\nStop reference: {result.stop_loss}\n"
+            f"Target reference: {result.take_profit}\nReason: {result.reason}\n\n"
+            "⚠️ Analysis only. No order was sent."
+        )
+    except Exception as exc:
+        await update.message.reply_text(f"⚠️ Analysis unavailable: {type(exc).__name__}.\nNo order was placed.")
+
+
 async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         result = get_btcusdt_price()
@@ -126,6 +147,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("price", price_command))
+    app.add_handler(CommandHandler("analysis", analysis_command))
     app.add_handler(CallbackQueryHandler(button_handler))
     print("BTC Telegram Bot V1 started in DEMO mode...")
     app.run_polling()
