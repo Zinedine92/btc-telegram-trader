@@ -7,7 +7,7 @@ import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import BotCommand, BotCommandScopeAllPrivateChats, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
 from binance_balance import get_btc_usdt_balances
@@ -189,14 +189,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def post_init(application: Application):
-    await application.bot.set_my_commands([
+    commands = [
         BotCommand("start", "Start the bot"),
         BotCommand("status", "Show bot status"),
         BotCommand("balance", "Show BTC/USDT balance (read-only)"),
         BotCommand("price", "Show BTC/USDT price"),
         BotCommand("analysis", "Show BTC/USDT analysis"),
         BotCommand("riskcheck", "Run a dry risk check"),
-    ])
+    ]
+    await application.bot.set_my_commands(commands)
+    await application.bot.set_my_commands(
+        commands,
+        scope=BotCommandScopeAllPrivateChats(),
+    )
 
 
 def main():
