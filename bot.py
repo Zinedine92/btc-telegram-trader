@@ -1,7 +1,6 @@
 """Telegram interface for the BTC/USDT trading bot.
 
 Demo/analysis-only mode. No exchange orders are placed.
-Runs a tiny HTTP health server so the app can be deployed as a Render Web Service.
 """
 
 import os
@@ -10,6 +9,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
+
+from market_data import get_btcusdt_price
 
 
 class HealthHandler(BaseHTTPRequestHandler):
@@ -37,23 +38,16 @@ def start_health_server():
     print(f"Health server listening on 0.0.0.0:{port}")
 
 
-def build_keyboard() -> InlineKeyboardMarkup:
-    keyboard = [
-        [
-            InlineKeyboardButton("📊 BTC Price", callback_data="price"),
-            InlineKeyboardButton("⚙️ Settings", callback_data="settings"),
-        ],
-        [
-            InlineKeyboardButton("🟢 LONG", callback_data="long"),
-            InlineKeyboardButton("🔴 SHORT", callback_data="short"),
-        ],
-        [
-            InlineKeyboardButton("📋 Open Trades", callback_data="trades"),
-            InlineKeyboardButton("📈 History", callback_data="history"),
-        ],
+def build_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📊 BTC Price", callback_data="price"),
+         InlineKeyboardButton("⚙️ Settings", callback_data="settings")],
+        [InlineKeyboardButton("🟢 LONG", callback_data="long"),
+         InlineKeyboardButton("🔴 SHORT", callback_data="short")],
+        [InlineKeyboardButton("📋 Open Trades", callback_data="trades"),
+         InlineKeyboardButton("📈 History", callback_data="history")],
         [InlineKeyboardButton("⛔ STOP BOT", callback_data="stop")],
-    ]
-    return InlineKeyboardMarkup(keyboard)
+    ])
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -64,8 +58,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Leverage limit: 20x\n"
         "Risk limit: 0.5%\n"
         "Minimum RR: 1:2\n\n"
-        "لا توجد أوامر حقيقية متصلة بالمنصة.\n"
-        "اختار العملية:",
+        "لا توجد أوامر حقيقية متصلة بالمنصة.",
         reply_markup=build_keyboard(),
     )
 
@@ -75,16 +68,45 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🟢 BOT STATUS\n\n"
         "Telegram: ONLINE\n"
         "Mode: DEMO / ANALYSIS ONLY\n"
+        "Market Data: READ-ONLY\n"
         "Execution: DISABLED\n"
         "Risk Engine: REQUIRED BEFORE EXECUTION"
     )
 
 
+async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        result = get_btcusdt_price()
+        await update.message.reply_text(
+            f"📊 BTC/USDT\n\nPrice: {result.price} USDT\n"
+            "Source: Binance public market data\n"
+            "Mode: READ-ONLY / DEMO"
+        )
+    except Exception:
+        await update.message.reply_text(
+            "⚠️ BTC price is temporarily unavailable.\nNo order was placed."
+        )
+
+
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
+    if query.data == "price":
+        try:
+            result = get_btcusdt_price()
+            await query.edit_message_text(
+                f"📊 BTC/USDT\n\nPrice: {result.price} USDT\n"
+                "Source: Binance public market data\n"
+                "Mode: READ-ONLY / DEMO"
+            )
+        except Exception:
+            await query.edit_message_text(
+                "⚠️ BTC price is temporarily unavailable.\nNo order was placed."
+            )
+        return
+
     responses = {
-        "price": "📊 BTC Price\n\nDemo mode — price feed not connected yet.",
         "settings": "⚙️ Settings\n\nLeverage hard limit: 20x\nRisk per trade: 0.5%\nMinimum RR: 1:2",
         "long": "🟢 LONG selected\n\nDEMO ONLY — no real order was sent.\nSignal validation + Risk Engine are required.",
         "short": "🔴 SHORT selected\n\nDEMO ONLY — no real order was sent.\nSignal validation + Risk Engine are required.",
@@ -103,6 +125,7 @@ def main():
     app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("status", status))
+    app.add_handler(CommandHandler("price", price_command))
     app.add_handler(CallbackQueryHandler(button_handler))
     print("BTC Telegram Bot V1 started in DEMO mode...")
     app.run_polling()
