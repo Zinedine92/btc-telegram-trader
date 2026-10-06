@@ -7,7 +7,7 @@ import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
 from binance_balance import get_btc_usdt_balances
@@ -188,12 +188,23 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(responses.get(query.data, "Unknown command."))
 
 
+async def post_init(application: Application):
+    await application.bot.set_my_commands([
+        BotCommand("start", "Start the bot"),
+        BotCommand("status", "Show bot status"),
+        BotCommand("balance", "Show BTC/USDT balance (read-only)"),
+        BotCommand("price", "Show BTC/USDT price"),
+        BotCommand("analysis", "Show BTC/USDT analysis"),
+        BotCommand("riskcheck", "Run a dry risk check"),
+    ])
+
+
 def main():
     token = os.getenv("BOT_TOKEN")
     if not token:
         raise RuntimeError("BOT_TOKEN is missing")
     start_health_server()
-    app = Application.builder().token(token).build()
+    app = Application.builder().token(token).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("balance", balance_command))
