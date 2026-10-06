@@ -5,9 +5,40 @@ Secrets must be provided through environment variables and never committed.
 """
 
 import os
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
+
+
+class HealthHandler(BaseHTTPRequestHandler):
+    """Minimal HTTP health endpoint for Render Web Service."""
+
+    def do_GET(self):
+        if self.path in ("/", "/health"):
+            body = b'{"status":"ok","mode":"demo","execution":"disabled"}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        self.send_response(404)
+        self.end_headers()
+
+    def log_message(self, format, *args):
+        return
+
+
+def start_health_server():
+    port = int(os.getenv("PORT", "10000"))
+    server = ThreadingHTTPServer(("0.0.0.0", port), HealthHandler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    print(f"Health server listening on 0.0.0.0:{port}")
+    return server
 
 
 def build_keyboard() -> InlineKeyboardMarkup:
@@ -89,6 +120,8 @@ def main():
     token = os.getenv("BOT_TOKEN")
     if not token:
         raise RuntimeError("BOT_TOKEN is missing")
+
+    start_health_server()
 
     app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("start", start))
