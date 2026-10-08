@@ -7,6 +7,7 @@ import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from dotenv import load_dotenv
 from telegram import BotCommand, BotCommandScopeAllPrivateChats, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
@@ -14,6 +15,10 @@ from binance_balance import get_btc_usdt_balances
 from market_data import get_btcusdt_price, get_btcusdt_candles
 from strategy import analyze
 from risk_gate import evaluate_analysis
+
+
+# Load environment variables from .env file (if it exists)
+load_dotenv()
 
 
 class HealthHandler(BaseHTTPRequestHandler):
@@ -35,7 +40,14 @@ class HealthHandler(BaseHTTPRequestHandler):
 
 def start_health_server():
     port = int(os.getenv("PORT", "10000"))
-    server = ThreadingHTTPServer(("0.0.0.0", port), HealthHandler)
+    if port <= 0:
+        print("Health server disabled because PORT is not positive.")
+        return
+    try:
+        server = ThreadingHTTPServer(("0.0.0.0", port), HealthHandler)
+    except OSError as exc:
+        print(f"Health server failed to bind to port {port}: {exc}")
+        return
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     print(f"Health server listening on 0.0.0.0:{port}")
@@ -207,7 +219,7 @@ async def post_init(application: Application):
 def main():
     token = os.getenv("BOT_TOKEN")
     if not token:
-        raise RuntimeError("BOT_TOKEN is missing")
+        raise RuntimeError("BOT_TOKEN is missing. Set it in your environment or .env file before runtime.")
     start_health_server()
     app = Application.builder().token(token).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
@@ -218,7 +230,7 @@ def main():
     app.add_handler(CommandHandler("riskcheck", riskcheck_command))
     app.add_handler(CallbackQueryHandler(button_handler))
     print("BTC Telegram Bot V1 started in DEMO mode...")
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":
