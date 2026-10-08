@@ -1,2 +1,6 @@
 python-telegram-bot==22.5
 python-dotenv==1.1.1
+python-binance==1.0.17
+gunicorn==22.0.0
+pytest==7.4.3
+pytest-cov==4.1.0
