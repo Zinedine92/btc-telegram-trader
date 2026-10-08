@@ -46,7 +46,9 @@ class BinanceReadonlyClientTests(unittest.TestCase):
         self.assertEqual(captured["method"], "GET")
         self.assertEqual(captured["timeout"], 10)
         # Binance requires uppercase header name X-MBX-APIKEY
-        self.assertEqual(captured["headers"]["X-MBX-APIKEY"], "test-key")
+        # Use case-insensitive lookup since HTTP headers are case-insensitive
+        headers_lower = {k.lower(): v for k, v in captured["headers"].items()}
+        self.assertEqual(headers_lower["x-mbx-apikey"], "test-key")
 
         query = captured["url"].split("?", 1)[1]
         unsigned = query.split("&signature=", 1)[0]
