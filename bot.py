@@ -216,11 +216,13 @@ async def post_init(application: Application):
     )
 
 
-def main():
+def main(*, embedded=False):
     token = os.getenv("BOT_TOKEN")
     if not token:
         raise RuntimeError("BOT_TOKEN is missing. Set it in your environment or .env file before runtime.")
-    start_health_server()
+    # Passenger already serves the WSGI health endpoint; avoid binding a second port.
+    if not embedded:
+        start_health_server()
     app = Application.builder().token(token).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("status", status))
@@ -230,7 +232,8 @@ def main():
     app.add_handler(CommandHandler("riskcheck", riskcheck_command))
     app.add_handler(CallbackQueryHandler(button_handler))
     print("BTC Telegram Bot V1 started in DEMO mode...")
-    app.run_polling(drop_pending_updates=True)
+    # Passenger starts this from a background thread, where signal handlers are unavailable.
+    app.run_polling(drop_pending_updates=True, stop_signals=None if embedded else ...)
 
 
 if __name__ == "__main__":
