@@ -100,9 +100,30 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"USDT\nFree: {usdt['free']:.2f}\nLocked: {usdt['locked']:.2f}\n\n"
             "🔒 READ-ONLY — no orders, transfers, or withdrawals."
         )
-    except Exception as exc:
+    except RuntimeError as exc:
+        # Report only safe, known configuration causes. Never expose credentials.
+        message = str(exc)
+        if "credentials" in message.lower() or "api key" in message.lower():
+            detail = (
+                "Binance API credentials are unavailable to the running process. "
+                "Check the application's environment variables and restart the app."
+            )
+        elif "TESTNET" in message or "LIVE mode is blocked" in message:
+            detail = (
+                "Binance mode configuration blocked the request. Keep TESTNET enabled "
+                "while diagnosing; real trading remains disabled."
+            )
+        else:
+            detail = "A runtime configuration check failed. Check the hosting error log."
         await update.message.reply_text(
-            f"⚠️ Balance unavailable: {type(exc).__name__}.\n"
+            f"⚠️ Balance unavailable: {detail}\nNo order was placed."
+        )
+    except Exception as exc:
+        # Log only the exception type, not its message, URL, headers, or secrets.
+        print("Balance check failed; exception type:", type(exc).__name__)
+        await update.message.reply_text(
+            f"⚠️ Balance unavailable: {type(exc).__name__}. "
+            "Check the hosting application error log for details.\n"
             "No order was placed."
         )
 
