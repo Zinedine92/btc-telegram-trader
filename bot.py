@@ -89,6 +89,24 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def diag_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Report only whether runtime variables exist; never reveal their values."""
+    key_set = bool(os.getenv("BINANCE_API_KEY"))
+    secret_set = bool(os.getenv("BINANCE_API_SECRET"))
+    mode = os.getenv("BINANCE_MODE", "TESTNET").strip().upper()
+    live_opt_in = os.getenv("ENABLE_LIVE_TRADING", "").strip().upper() == "YES"
+    await update.message.reply_text(
+        "🔎 SAFE RUNTIME DIAGNOSTIC\n\n"
+        f"BOT_TOKEN: {'SET' if os.getenv('BOT_TOKEN') else 'MISSING'}\n"
+        f"BINANCE_API_KEY: {'SET' if key_set else 'MISSING'}\n"
+        f"BINANCE_API_SECRET: {'SET' if secret_set else 'MISSING'}\n"
+        f"BINANCE_MODE: {mode}\n"
+        f"Live trading opt-in: {'YES' if live_opt_in else 'NO'}\n\n"
+        "Only variable presence is checked; secret values are never shown. "
+        "No Binance request or order is made."
+    )
+
+
 async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         balances = get_btc_usdt_balances()
@@ -226,6 +244,7 @@ async def post_init(application: Application):
         BotCommand("start", "Start the bot"),
         BotCommand("status", "Show bot status"),
         BotCommand("balance", "Show BTC/USDT balance (read-only)"),
+        BotCommand("diag", "Check safe runtime configuration"),
         BotCommand("price", "Show BTC/USDT price"),
         BotCommand("analysis", "Show BTC/USDT analysis"),
         BotCommand("riskcheck", "Run a dry risk check"),
@@ -248,6 +267,7 @@ def main(*, embedded=False):
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("balance", balance_command))
+    app.add_handler(CommandHandler("diag", diag_command))
     app.add_handler(CommandHandler("price", price_command))
     app.add_handler(CommandHandler("analysis", analysis_command))
     app.add_handler(CommandHandler("riskcheck", riskcheck_command))
