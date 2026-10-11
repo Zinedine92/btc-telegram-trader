@@ -233,7 +233,10 @@ def main(*, embedded=False):
     app.add_handler(CallbackQueryHandler(button_handler))
     print("BTC Telegram Bot V1 started in DEMO mode...")
     # Passenger starts this from a background thread, where signal handlers are unavailable.
-    app.run_polling(drop_pending_updates=True, stop_signals=None if embedded else ...)
+    if embedded:
+        app.run_polling(drop_pending_updates=True, stop_signals=None)
+    else:
+        app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":
