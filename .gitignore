@@ -1,3 +1,7 @@
 .env
 __pycache__/
 *.pyc
+
+# cPanel runtime/deployment directories (keep local files out of Git status)
+/tmp/
+/public_html/
