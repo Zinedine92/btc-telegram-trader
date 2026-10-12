@@ -1,0 +1,4 @@
+---
+deployment:
+  tasks:
+    - /bin/echo "cPanel deployment hook ran for btc-telegram-trader"
