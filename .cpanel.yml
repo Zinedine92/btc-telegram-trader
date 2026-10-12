@@ -1,6 +1,6 @@
 ---
 deployment:
   tasks:
+    - export DEPLOYPATH=/home/isaamojw/repositories/btc-telegram-trader/
     - /bin/mkdir -p /home/isaamojw/repositories/btc-telegram-trader/tmp
     - /usr/bin/touch /home/isaamojw/repositories/btc-telegram-trader/tmp/restart.txt
-    - /bin/echo "cPanel deployment hook ran for btc-telegram-trader"
