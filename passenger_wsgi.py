@@ -8,7 +8,6 @@ import fcntl
 import os
 import threading
 import time
-import traceback
 
 _LOCK_PATH = "/tmp/btc-telegram-trader-isaamojw.lock"
 _state_lock = threading.Lock()
@@ -52,7 +51,6 @@ def _run_telegram_bot():
                 error_type = "BOT_TOKEN_MISSING" if str(exc) == "BOT_TOKEN_MISSING" else type(exc).__name__
                 _set_state("error", error_type)
                 print("Telegram supervisor: startup/runtime failure:", error_type, flush=True)
-                traceback.print_exc()
             finally:
                 try:
                     if not loop.is_closed():
