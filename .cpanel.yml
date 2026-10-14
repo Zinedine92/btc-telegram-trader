@@ -1,6 +1,6 @@
 ---
 deployment:
   tasks:
-    - export DEPLOYPATH=/home/isaamojw/repositories/btc-telegram-trader/
-    - /bin/mkdir -p /home/isaamojw/repositories/btc-telegram-trader/tmp
-    - /usr/bin/touch /home/isaamojw/repositories/btc-telegram-trader/tmp/restart.txt
+    - export DEPLOYPATH=/home/isaacparfum/repositories/btc-telegram-trader/
+    - /bin/mkdir -p /home/isaacparfum/repositories/btc-telegram-trader/tmp
+    - /usr/bin/touch /home/isaacparfum/repositories/btc-telegram-trader/tmp/restart.txt
