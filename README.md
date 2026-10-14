@@ -1,17 +1,33 @@
-# Telegram Bot Configuration
-BOT_TOKEN=your_telegram_bot_token_here
+# btc-telegram-trader
 
-# Binance API Configuration (TESTNET by default - SAFE)
-BINANCE_API_KEY=your_binance_api_key_here
-BINANCE_API_SECRET=your_binance_api_secret_here
+Python Telegram bot for read-only BTC/USDT market analysis and demo risk checks.
+No exchange orders are placed.
 
-# Binance Mode: TESTNET (default/safe) or LIVE (requires explicit opt-in)
-BINANCE_MODE=TESTNET
+## Runtime
+- Python 3.11+ (the code uses `X | None` type syntax, which needs Python 3.10+)
+- Starts from `python bot.py`
 
-# Enable Live Trading - ONLY set to YES after explicit approval
-# This is a safety mechanism to prevent accidental live trading
-ENABLE_LIVE_TRADING=NO
+## Environment
+Copy `env.example` to `.env` and set the values before running the bot.
+`BOT_TOKEN` is required. Binance keys are only needed for `/balance`.
 
-# Health Check Server Port (for Namecheap/cPanel compatibility)
-# On shared hosting, use a high port or disable via PORT=0
-PORT=10000
+## Namecheap/cPanel notes
+- `passenger_wsgi.py` starts the Telegram polling loop in a background thread and
+  serves a `/health` endpoint. In "Setup Python App", choose Python 3.11 or newer,
+  set the environment variables there, install `requirements.txt`, then restart the app.
+- Shared hosting may not keep a background Python process alive after restarts.
+  Alternatively run the bot with `nohup python bot.py` in a cPanel terminal.
+
+## Startup
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp env.example .env
+python bot.py
+```
+
+## Tests
+```bash
+python -m unittest discover -s tests -v
+```
