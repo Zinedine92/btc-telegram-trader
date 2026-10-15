@@ -6,6 +6,7 @@ It never creates, modifies, cancels, or withdraws orders.
 
 import hashlib
 import hmac
+import json
 import time
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -22,6 +23,23 @@ def _signed_query(params, secret):
         hashlib.sha256,
     ).hexdigest()
     return query + "&signature=" + signature
+
+
+def describe_http_error(exc):
+    """Return a short, secret-free description of a Binance HTTPError.
+
+    Includes only the HTTP status and Binance's own error code/message, which
+    never contain API keys, secrets, or signatures.
+    """
+    text = f"HTTP {exc.code}"
+    try:
+        body = json.loads(exc.read().decode("utf-8", "replace"))
+        code = body.get("code")
+        if code is not None:
+            text += f" (Binance code {code}: {str(body.get('msg', ''))[:200]})"
+    except Exception:
+        pass
+    return text
 
 
 def get_account_info(opener=urlopen):

@@ -6,12 +6,14 @@ Demo/analysis-only mode. No exchange orders are placed.
 import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.error import HTTPError
 
 from dotenv import load_dotenv
 from telegram import BotCommand, BotCommandScopeAllPrivateChats, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
 from binance_balance import get_btc_usdt_balances
+from binance_readonly_client import describe_http_error
 from market_data import get_btcusdt_price, get_btcusdt_candles
 from strategy import analyze
 from risk_gate import evaluate_analysis
@@ -135,6 +137,14 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             detail = "A runtime configuration check failed. Check the hosting error log."
         await update.message.reply_text(
             f"⚠️ Balance unavailable: {detail}\nNo order was placed."
+        )
+    except HTTPError as exc:
+        # Binance's HTTP status and error code/message contain no credentials.
+        detail = describe_http_error(exc)
+        print("Balance check failed:", detail)
+        await update.message.reply_text(
+            f"⚠️ Balance unavailable: Binance returned {detail}.\n"
+            "No order was placed."
         )
     except Exception as exc:
         # Log only the exception type, not its message, URL, headers, or secrets.
