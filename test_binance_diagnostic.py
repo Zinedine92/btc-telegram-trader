@@ -1,292 +1,120 @@
 #!/usr/bin/env python3
-"""Comprehensive Binance API diagnostic.
+"""Safe, read-only Binance TESTNET connectivity diagnostic.
 
-This script verifies Binance API connectivity at multiple levels:
-1. Public API connectivity (no credentials required)
-2. Configuration validation (environment variables present)
-3. Authenticated account access (read-only only)
-
-This is READ-ONLY and never places, cancels, or modifies orders.
-
-Usage:
-    python test_binance_diagnostic.py
-
-Exit codes:
-    0 = All tests passed
-    1 = Configuration error (missing credentials or environment)
-    2 = Network or API error
-    3 = Authentication error (invalid credentials)
+Checks configuration, TESTNET public connectivity, and authenticated account
+access using the repository's existing read-only client. It never prints
+credentials, signatures, account data, or raw server response bodies. It
+refuses to run authenticated checks unless BINANCE_MODE is TESTNET.
 """
-
-import sys
 import json
-import time
+import os
+import sys
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
-from urllib.error import URLError, HTTPError
-
-
-def test_public_connectivity():
-    """Test public Binance API connectivity (no credentials needed)."""
-    print("\n" + "=" * 70)
-    print("[TEST 1/3] PUBLIC BINANCE API CONNECTIVITY")
-    print("=" * 70)
-    print()
-
-    try:
-        # Use public endpoint: server time
-        print("[1a] Checking Binance Testnet public endpoint...")
-        testnet_url = "https://testnet.binance.vision/api/v3/time"
-        request = Request(testnet_url, method="GET")
-
-        with urlopen(request, timeout=10) as response:
-            data = response.read().decode("utf-8")
-            time_data = json.loads(data)
-            print(f"  ✓ Testnet HTTP 200 OK")
-            print(f"  ✓ Server time (testnet): {time_data.get('serverTime')}")
-
-        print()
-        print("[1b] Checking Binance Live public endpoint...")
-        live_url = "https://api.binance.com/api/v3/time"
-        request = Request(live_url, method="GET")
-
-        with urlopen(request, timeout=10) as response:
-            data = response.read().decode("utf-8")
-            time_data = json.loads(data)
-            print(f"  ✓ Live HTTP 200 OK")
-            print(f"  ✓ Server time (live): {time_data.get('serverTime')}")
-
-        print()
-        return True
-    except HTTPError as e:
-        print(f"  ✗ HTTP Error {e.code}: {e.reason}")
-        print(f"     Response: {e.read().decode('utf-8')}")
-        return False
-    except URLError as e:
-        print(f"  ✗ Network Error: {e.reason}")
-        return False
-    except TimeoutError as e:
-        print(f"  ✗ Connection Timeout: {e}")
-        return False
-    except Exception as e:
-        print(f"  ✗ Unexpected Error: {e}")
-        return False
 
 
 def test_configuration():
-    """Test environment variable configuration."""
-    print("\n" + "=" * 70)
-    print("[TEST 2/3] CONFIGURATION VALIDATION")
-    print("=" * 70)
-    print()
-
-    import os
-
-    print("[2a] Checking required environment variables...")
-
-    # Check API credentials
-    api_key = os.getenv("BINANCE_API_KEY")
-    api_secret = os.getenv("BINANCE_API_SECRET")
-
-    if not api_key:
-        print("  ✗ BINANCE_API_KEY is not set")
+    """Validate that credentials exist and this diagnostic is TESTNET-only."""
+    print("[1/3] CONFIGURATION")
+    missing = [
+        name for name in ("BINANCE_API_KEY", "BINANCE_API_SECRET")
+        if not os.getenv(name)
+    ]
+    if missing:
+        print("FAIL: Missing required environment variable(s): " + ", ".join(missing))
         return False
-    if not api_secret:
-        print("  ✗ BINANCE_API_SECRET is not set")
-        return False
-
-    print(f"  ✓ BINANCE_API_KEY is set (length: {len(api_key)})")
-    print(f"  ✓ BINANCE_API_SECRET is set (length: {len(api_secret)})")
-
-    print()
-    print("[2b] Checking Binance mode configuration...")
 
     mode = os.getenv("BINANCE_MODE", "TESTNET").strip().upper()
-    enable_live = os.getenv("ENABLE_LIVE_TRADING", "NO").strip().upper()
+    if mode != "TESTNET":
+        print("FAIL: Diagnostic is TESTNET-only; set BINANCE_MODE=TESTNET.")
+        print("No Binance authenticated request was sent.")
+        return False
 
-    print(f"  ✓ BINANCE_MODE: {mode} (default: TESTNET)")
-    print(f"  ✓ ENABLE_LIVE_TRADING: {enable_live} (default: NO)")
-
-    if mode == "LIVE" and enable_live != "YES":
-        print("  ⚠️  LIVE mode is blocked without ENABLE_LIVE_TRADING=YES")
-
-    print()
+    print("PASS: Binance credentials are present (values not displayed).")
+    print("PASS: Mode is TESTNET; live trading remains untouched.")
     return True
 
 
+def test_public_connectivity():
+    """Check only the Binance TESTNET public server-time endpoint."""
+    print("[2/3] TESTNET PUBLIC CONNECTIVITY")
+    request = Request("https://testnet.binance.vision/api/v3/time", method="GET")
+    try:
+        with urlopen(request, timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            if response.status != 200 or "serverTime" not in payload:
+                print("FAIL: TESTNET returned an unexpected response.")
+                return False
+        print("PASS: Binance TESTNET public endpoint responded.")
+        return True
+    except HTTPError as exc:
+        print(f"FAIL: TESTNET HTTP error (status {exc.code}); response body hidden.")
+    except URLError:
+        print("FAIL: Network/DNS connection to Binance TESTNET failed.")
+    except TimeoutError:
+        print("FAIL: Connection to Binance TESTNET timed out.")
+    except (ValueError, UnicodeError):
+        print("FAIL: TESTNET response could not be validated.")
+    except Exception:
+        print("FAIL: Unexpected TESTNET connectivity error; details hidden.")
+    return False
+
+
 def test_authenticated_access():
-    """Test authenticated Binance API access (read-only only)."""
-    print("\n" + "=" * 70)
-    print("[TEST 3/3] AUTHENTICATED ACCOUNT ACCESS (READ-ONLY)")
-    print("=" * 70)
-    print()
-
-    import os
-    import hashlib
-    import hmac
-    from urllib.parse import urlencode
-
-    print("[3a] Retrieving credentials...")
-    api_key = os.getenv("BINANCE_API_KEY")
-    api_secret = os.getenv("BINANCE_API_SECRET")
-
-    if not api_key or not api_secret:
-        print("  ✗ Credentials not available")
-        return False
-
-    print(f"  ✓ API Key: {api_key[:8]}...{api_key[-4:]}")
-    print(f"  ✓ API Secret: {'*' * (len(api_secret))} (masked)")
-
-    print()
-    print("[3b] Building authenticated request...")
-
-    # Determine which base URL to use
+    """Verify authenticated read-only access using the existing client."""
+    print("[3/3] AUTHENTICATED TESTNET ACCESS (READ-ONLY)")
     mode = os.getenv("BINANCE_MODE", "TESTNET").strip().upper()
-    base_url = (
-        "https://testnet.binance.vision"
-        if mode == "TESTNET"
-        else "https://api.binance.com"
-    )
-
-    params = {
-        "timestamp": int(time.time() * 1000),
-        "recvWindow": 5000,
-    }
-
-    # Build signed query
-    query_string = urlencode(params)
-    signature = hmac.new(
-        api_secret.encode("utf-8"),
-        query_string.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
-
-    signed_query = query_string + "&signature=" + signature
-    url = f"{base_url}/api/v3/account?{signed_query}"
-
-    print(f"  ✓ Target URL: {base_url}/api/v3/account")
-    print(f"  ✓ Mode: {mode}")
-
-    print()
-    print("[3c] Sending authenticated request...")
+    if mode != "TESTNET":
+        print("SKIP: TESTNET-only safety guard blocked the authenticated request.")
+        return False
+    if not os.getenv("BINANCE_API_KEY") or not os.getenv("BINANCE_API_SECRET"):
+        print("SKIP: Required credentials are missing.")
+        return False
 
     try:
-        request = Request(
-            url,
-            headers={"X-MBX-APIKEY": api_key},
-            method="GET",
-        )
-
-        with urlopen(request, timeout=10) as response:
-            account_data = response.read().decode("utf-8")
-            account_info = json.loads(account_data)
-
-            print(f"  ✓ HTTP 200 OK - Authentication successful")
-
-            # Parse account info
-            account_type = account_info.get("accountType", "UNKNOWN")
-            print(f"  ✓ Account Type: {account_type}")
-
-            # Show balances
-            balances = account_info.get("balances", [])
-            non_zero = [
-                b for b in balances
-                if float(b.get("free", 0)) > 0 or float(b.get("locked", 0)) > 0
-            ]
-
-            if non_zero:
-                print(f"  ✓ Non-zero balances: {len(non_zero)} asset(s)")
-                for b in non_zero[:5]:
-                    asset = b.get("asset")
-                    free = float(b.get("free", 0))
-                    locked = float(b.get("locked", 0))
-                    print(f"      - {asset}: free={free:.8f}, locked={locked:.8f}")
-                if len(non_zero) > 5:
-                    print(f"      ... and {len(non_zero) - 5} more")
-            else:
-                print(f"  ✓ No non-zero balances (account may be empty)")
-
-            print()
-            return True
-
-    except HTTPError as e:
-        if e.code == 401:
-            print(f"  ✗ HTTP 401 Unauthorized - Invalid API credentials")
+        # Existing client performs only GET /api/v3/account and uses
+        # exchange_config.py for the TESTNET base URL.
+        from binance_readonly_client import get_account_info
+        payload = json.loads(get_account_info())
+        if not isinstance(payload, dict) or "balances" not in payload:
+            print("FAIL: Binance response did not match the expected account schema.")
+            return False
+        print("PASS: Authenticated read-only TESTNET request succeeded.")
+        print("Account details and balances were intentionally not displayed.")
+        return True
+    except HTTPError as exc:
+        if exc.code in (401, 403):
+            print(f"FAIL: Binance rejected authentication/permissions (HTTP {exc.code}).")
         else:
-            print(f"  ✗ HTTP {e.code}: {e.reason}")
-        try:
-            response_body = e.read().decode("utf-8")
-            print(f"     Response: {response_body}")
-        except:
-            pass
-        return False
-
-    except URLError as e:
-        print(f"  ✗ Network Error: {e.reason}")
-        return False
-
-    except TimeoutError as e:
-        print(f"  ✗ Connection Timeout: {e}")
-        return False
-
-    except Exception as e:
-        print(f"  ✗ Unexpected Error: {e}")
-        return False
+            print(f"FAIL: Binance TESTNET returned HTTP {exc.code}; response body hidden.")
+    except URLError:
+        print("FAIL: Network/DNS connection failed during authenticated TESTNET access.")
+    except TimeoutError:
+        print("FAIL: Authenticated TESTNET request timed out.")
+    except RuntimeError:
+        print("FAIL: Binance configuration blocked the request.")
+    except (ValueError, UnicodeError):
+        print("FAIL: Binance returned an unreadable response.")
+    except Exception:
+        print("FAIL: Authenticated TESTNET check failed; details hidden.")
+    return False
 
 
 def main():
-    """Run all diagnostics."""
-    print("\n" + "=" * 70)
-    print("BINANCE API DIAGNOSTIC SUITE")
-    print("=" * 70)
+    print("BINANCE SAFE DIAGNOSTIC — TESTNET ONLY")
+    config_ok = test_configuration()
+    if not config_ok:
+        print("\nRESULT: FAIL — configuration must be corrected before network checks.")
+        return 1
 
-    results = {
-        "public_connectivity": test_public_connectivity(),
-        "configuration": test_configuration(),
-        "authenticated_access": test_authenticated_access(),
-    }
-
-    # Summary
-    print("\n" + "=" * 70)
-    print("DIAGNOSTIC SUMMARY")
-    print("=" * 70)
-    print()
-
-    print(f"Public Binance Connectivity:     {'PASS ✓' if results['public_connectivity'] else 'FAIL ✗'}")
-    print(f"Configuration Validation:        {'PASS ✓' if results['configuration'] else 'FAIL ✗'}")
-    print(f"Authenticated Account Access:    {'PASS ✓' if results['authenticated_access'] else 'NOT TESTED / FAIL ✗'}")
-
-    print()
-
-    if all(results.values()):
-        print("✓ ALL DIAGNOSTICS PASSED")
-        print()
-        print("✓ Public API connectivity: CONFIRMED")
-        print("✓ Authenticated access: CONFIRMED")
-        print()
-        print("⚠️  This test verifies READ-ONLY connectivity only.")
-        print("⚠️  Real trading remains DISABLED.")
-        print()
-        return 0
-    else:
-        print("✗ SOME DIAGNOSTICS FAILED - See details above")
-        print()
-
-        if not results["configuration"]:
-            print("NEXT STEP:")
-            print("  1. Set the following environment variables in cPanel:")
-            print("     - BINANCE_API_KEY")
-            print("     - BINANCE_API_SECRET")
-            print("  2. Verify via: python test_binance_diagnostic.py")
-            print()
-
-        if not results["authenticated_access"] and results["configuration"]:
-            print("NEXT STEP:")
-            print("  1. Check your Binance API credentials at https://www.binance.com/en/account/api-management")
-            print("  2. Verify the API key and secret are correct")
-            print("  3. Rerun: python test_binance_diagnostic.py")
-            print()
-
-        return 1 if not results["configuration"] else 3
+    public_ok = test_public_connectivity()
+    auth_ok = test_authenticated_access()
+    print("\nSUMMARY")
+    print("Configuration: " + ("PASS" if config_ok else "FAIL"))
+    print("TESTNET public connectivity: " + ("PASS" if public_ok else "FAIL"))
+    print("Authenticated TESTNET access: " + ("PASS" if auth_ok else "FAIL"))
+    print("Trading actions: NOT AVAILABLE; no orders were sent.")
+    return 0 if config_ok and public_ok and auth_ok else 2
 
 
 if __name__ == "__main__":
