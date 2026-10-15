@@ -2,10 +2,12 @@
 
 import hashlib
 import hmac
+import io
 import json
 import os
 import unittest
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 import binance_readonly_client
 
@@ -58,6 +60,18 @@ class BinanceReadonlyClientTests(unittest.TestCase):
             hashlib.sha256,
         ).hexdigest()
         self.assertEqual(query.split("&signature=", 1)[1], expected)
+
+    def test_describe_http_error_includes_status_and_binance_code(self):
+        body = json.dumps({"code": -2015, "msg": "Invalid API-key, IP, or permissions."})
+        exc = HTTPError("https://x", 401, "Unauthorized", {}, io.BytesIO(body.encode()))
+        text = binance_readonly_client.describe_http_error(exc)
+        self.assertIn("HTTP 401", text)
+        self.assertIn("-2015", text)
+        self.assertIn("Invalid API-key", text)
+
+    def test_describe_http_error_handles_non_json_body(self):
+        exc = HTTPError("https://x", 451, "Unavailable", {}, io.BytesIO(b"<html>blocked</html>"))
+        self.assertEqual(binance_readonly_client.describe_http_error(exc), "HTTP 451")
 
     def test_client_has_no_order_method(self):
         self.assertFalse(hasattr(binance_readonly_client, "create_order"))
