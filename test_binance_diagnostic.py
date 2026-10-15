@@ -80,7 +80,7 @@ def test_authenticated_access():
             print("FAIL: Binance response did not match the expected account schema.")
             return False
         print("PASS: Authenticated read-only TESTNET request succeeded.")
-        print("Account details and balances were intentionally not displayed.")
+        print("Account details were intentionally not displayed.")
         return True
     except HTTPError as exc:
         if exc.code in (401, 403):
