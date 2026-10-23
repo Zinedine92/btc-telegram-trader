@@ -167,7 +167,7 @@ async def riskcheck_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         equity = float(context.args[0])
         leverage = int(context.args[1]) if len(context.args) > 1 else 20
-        analysis = analyze(get_btcusdt_candles(interval="1h", limit=100))
+        analysis = analyze(get_btcusdt_candles(interval="1h", limit=200))
         approved, message, result = evaluate_analysis(analysis, equity, leverage)
         if result is None:
             await update.message.reply_text(f"🛡️ RISK CHECK\n\n{message}")
@@ -188,7 +188,7 @@ async def riskcheck_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def analysis_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        result = analyze(get_btcusdt_candles(interval="1h", limit=100))
+        result = analyze(get_btcusdt_candles(interval="1h", limit=200))
         if result.bias == "NO_TRADE":
             await update.message.reply_text(
                 "🟡 BTC/USDT ANALYSIS\n\nDecision: NO TRADE\n"
