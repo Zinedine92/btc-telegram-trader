@@ -18,8 +18,8 @@ def evaluate_analysis(analysis: Analysis, equity: float, leverage: int = 20):
         entry_price=float(analysis.entry),
         stop_loss=float(analysis.stop_loss),
         take_profit=float(analysis.take_profit),
-        market_regime="TRENDING",
-        structure_confirmed=True,
+        market_regime=analysis.regime,
+        structure_confirmed=analysis.structure_confirmed,
         setup_confirmed=True,
     )
 
