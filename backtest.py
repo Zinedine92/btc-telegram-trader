@@ -5,7 +5,7 @@ signal is entered at the NEXT bar's open (+slippage); stop/target are checked
 from that bar onward. If a bar touches both stop and target the stop is assumed
 to hit first (conservative). Results are expressed in R multiples net of costs.
 
-Usage:  python backtest.py klines.csv [--compare] [--split]   (--split: stats for 4 time slices)
+Usage:  python backtest.py klines.csv [--compare] [--split] [--factors]   (--split: stats for 4 time slices)
 CSV: Binance kline layout (open_time, open, high, low, close, volume, ...) with
 or without a header row.
 """
@@ -33,6 +33,8 @@ class Trade:
     exit_index: int
     r_multiple: float
     exit_reason: str
+    score: float = 0.0
+    factors: tuple = ()   # (name, points, max) at entry
 
 
 @dataclass(frozen=True)
@@ -125,7 +127,8 @@ def run_backtest(candles: Sequence[Candle], analyze: Callable, equity: float = 1
         if exit_idx is None:
             exit_idx = min(n, i + 1 + MAX_HOLD_BARS) - 1
             exit_price = float(candles[exit_idx].close)
-        trades.append(Trade(side, i + 1, exit_idx, _r_net(side, entry, stop, exit_price), reason))
+        trades.append(Trade(side, i + 1, exit_idx, _r_net(side, entry, stop, exit_price), reason,
+                            float(a.score), tuple(getattr(a, "factors", ()))))
         i = exit_idx + 1   # one position at a time
     return trades
 
@@ -154,6 +157,36 @@ def segment_stats(trades: Sequence[Trade], total_bars: int, segments: int) -> Li
     return [summarize(b) for b in buckets]
 
 
+def _avg(rs):
+    return sum(rs) / len(rs) if rs else 0.0
+
+
+def factor_report(trades: Sequence[Trade]) -> List[str]:
+    """Average R by score band and by factor (strong >=70% of max vs weaker).
+
+    Diagnostic only: with ~100 trades the differences are noisy. Do NOT tune
+    weights to maximise this report on the same data (overfitting).
+    """
+    lines = ["Score bands (avg R, n):"]
+    for lo, hi in ((70, 75), (75, 80), (80, 101)):
+        rs = [t.r_multiple for t in trades if lo <= t.score < hi]
+        lines.append(f"  score {lo}-{min(hi, 100)}: avgR={_avg(rs):+.3f} n={len(rs)}")
+    names = []
+    for t in trades:
+        for n, _, _ in t.factors:
+            if n not in names:
+                names.append(n)
+    lines.append("Factors (strong = >=70% of max points):")
+    for n in names:
+        strong, weak = [], []
+        for t in trades:
+            for fn, pts, mx in t.factors:
+                if fn == n:
+                    (strong if pts >= 0.7 * mx else weak).append(t.r_multiple)
+        lines.append(f"  {n:<19} strong avgR={_avg(strong):+.3f} (n={len(strong)})  weaker avgR={_avg(weak):+.3f} (n={len(weak)})")
+    return lines
+
+
 def format_stats(name: str, s: Stats) -> str:
     return (f"{name}: trades={s.trades} (L{s.longs}/S{s.shorts}) win={s.win_rate*100:.1f}% "
             f"avgR={s.avg_r:+.3f} PF={s.profit_factor:.2f} totalR={s.total_r:+.1f} maxDD={s.max_drawdown_r:.1f}R")
@@ -177,6 +210,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     if "--split" in argv:
         for k, st in enumerate(segment_stats(v2_trades, len(candles), 4), 1):
             print(format_stats(f"  part {k}/4", st))
+    if "--factors" in argv:
+        print("\n".join(factor_report(v2_trades)))
     if "--compare" in argv:
         print(format_stats("legacy", summarize(run_backtest(candles, strategy_legacy.analyze))))
     print("Costs: fee 0.04%/side + slippage 0.02%/side. Past results do not predict future returns.")
