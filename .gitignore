@@ -5,3 +5,6 @@ __pycache__/
 # cPanel runtime and deployment-generated directories
 tmp/
 public_html/
+.bot.lock
+bot.log
+*.csv
