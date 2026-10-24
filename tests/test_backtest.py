@@ -66,6 +66,21 @@ class BacktestTests(unittest.TestCase):
         self.assertIn("strong avgR=+2.000 (n=1)  weaker avgR=-1.000 (n=1)", text)
         self.assertEqual(backtest.factor_report([])[0], "Score bands (avg R, n):")
 
+    def test_resample_groups_from_the_end_without_lookahead(self):
+        cs = [cd(i, i + 1, i - 1, i + 0.5) for i in range(1, 8)]   # 7 candles, factor 3
+        out = backtest.resample(cs, 3)
+        self.assertEqual(len(out), 2)               # first candle dropped so groups end at the last bar
+        self.assertEqual(out[-1].close, cs[-1].close)
+        self.assertEqual(out[-1].open, cs[-3].open)
+        self.assertEqual(out[-1].high, max(c.high for c in cs[-3:]))
+        self.assertEqual(out[-1].volume, Decimal(300))
+
+    def test_run_with_htf_is_deterministic_and_runs(self):
+        c = backtest.synthetic_candles(1500, seed=5)
+        a = backtest.run_backtest(c, strategy.analyze, htf_factor=4)
+        b = backtest.run_backtest(c, strategy.analyze, htf_factor=4)
+        self.assertEqual(a, b)
+
     def test_full_run_on_synthetic_data_is_deterministic(self):
         c = backtest.synthetic_candles(1200, seed=3)
         a = backtest.summarize(backtest.run_backtest(c, strategy.analyze))
