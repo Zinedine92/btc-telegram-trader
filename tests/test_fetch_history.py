@@ -26,6 +26,17 @@ class FetchHistoryTests(unittest.TestCase):
         self.assertEqual(len(candles), 300)
         self.assertEqual(candles[0].close, Decimal("101"))
 
+    def test_gate_page_uses_requested_symbol(self):
+        seen = []
+        with patch.object(fh, "_get", side_effect=lambda url: seen.append(url) or []):
+            fh.gate_page("4h", 1700000000000, 1700100000000, "ETHUSDT")
+            fh.binance_page("4h", 1700000000000, 1700100000000, "ETHUSDT")
+        self.assertIn("ETH_USDT", seen[0])
+        self.assertIn("symbol=ETHUSDT", seen[1])
+
+    def test_unknown_symbol_rejected(self):
+        self.assertEqual(fh.main(["30", "x.csv", "1h", "DOGEUSDT"]), 1)
+
     def test_bad_args_rejected(self):
         self.assertEqual(fh.main(["0"]), 1)
         self.assertEqual(fh.main(["30", "x.csv", "5m"]), 1)
