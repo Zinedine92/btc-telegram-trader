@@ -14,6 +14,7 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Cont
 
 from binance_balance import get_btc_usdt_balances
 from binance_readonly_client import describe_http_error
+import market_data
 from market_data import get_btcusdt_price, get_btcusdt_candles
 from strategy import analyze
 from risk_gate import evaluate_analysis
@@ -211,7 +212,7 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result = get_btcusdt_price()
         await update.message.reply_text(
             f"📊 BTC/USDT\n\nPrice: {result.price} USDT\n"
-            "Source: Binance public market data\n"
+            f"Source: {market_data.LAST_SOURCE} public market data\n"
             "Mode: READ-ONLY / DEMO"
         )
     except Exception:
@@ -229,7 +230,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             result = get_btcusdt_price()
             await query.edit_message_text(
                 f"📊 BTC/USDT\n\nPrice: {result.price} USDT\n"
-                "Source: Binance public market data\n"
+                f"Source: {market_data.LAST_SOURCE} public market data\n"
                 "Mode: READ-ONLY / DEMO"
             )
         except Exception:
