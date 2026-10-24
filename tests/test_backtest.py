@@ -55,6 +55,17 @@ class BacktestTests(unittest.TestCase):
         seg = backtest.segment_stats(trades, 100, 4)
         self.assertEqual([s.trades for s in seg], [1, 0, 1, 1])
 
+    def test_factor_report_groups_by_strength(self):
+        T = backtest.Trade
+        f_hi = (("trigger", 15.0, 15.0), ("volume", 2.0, 10.0))
+        f_lo = (("trigger", 3.0, 15.0), ("volume", 9.0, 10.0))
+        trades = [T("LONG", 1, 2, 2.0, "target", 72.0, f_hi), T("LONG", 3, 4, -1.0, "stop", 78.0, f_lo)]
+        text = "\n".join(backtest.factor_report(trades))
+        self.assertIn("score 70-75: avgR=+2.000 n=1", text)
+        self.assertIn("trigger", text)
+        self.assertIn("strong avgR=+2.000 (n=1)  weaker avgR=-1.000 (n=1)", text)
+        self.assertEqual(backtest.factor_report([])[0], "Score bands (avg R, n):")
+
     def test_full_run_on_synthetic_data_is_deterministic(self):
         c = backtest.synthetic_candles(1200, seed=3)
         a = backtest.summarize(backtest.run_backtest(c, strategy.analyze))
