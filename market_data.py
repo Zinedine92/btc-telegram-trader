@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 import json
 
@@ -14,10 +15,17 @@ class PriceResult:
 
 def get_btcusdt_price(timeout: float = 5.0) -> PriceResult:
     request = Request(BINANCE_TICKER_URL, headers={"User-Agent": "btc-telegram-trader/1.0"})
-    with urlopen(request, timeout=timeout) as response:
-        if response.status != 200:
-            raise RuntimeError(f"Market-data HTTP status: {response.status}")
-        payload = json.loads(response.read().decode("utf-8"))
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            if response.status != 200:
+                raise RuntimeError(f"Market-data HTTP status: {response.status}")
+            payload = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError):
+        # Binance blocked/unreachable: Gate.io BTC_USDT public ticker.
+        rows = _get_json(GATE_TICKER_URL, timeout)
+        if not rows or "last" not in rows[0]:
+            raise RuntimeError("Invalid fallback price response.")
+        payload = {"symbol": "BTCUSDT", "price": rows[0]["last"]}
     if payload.get("symbol") != "BTCUSDT":
         raise RuntimeError("Unexpected market-data symbol.")
     try:
@@ -41,17 +49,49 @@ class Candle:
     close: Decimal
     volume: Decimal
 
+GATE_KLINES_URL = "https://api.gateio.ws/api/v4/spot/candlesticks"
+GATE_TICKER_URL = "https://api.gateio.ws/api/v4/spot/tickers?currency_pair=BTC_USDT"
+_HEADERS = {"User-Agent": "Mozilla/5.0 btc-telegram-trader/1.0"}
+
+
+def _get_json(url: str, timeout: float):
+    with urlopen(Request(url, headers=_HEADERS), timeout=timeout) as response:
+        if response.status != 200:
+            raise RuntimeError(f"Market-data HTTP status: {response.status}")
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _binance_candles(interval, limit, timeout):
+    url = KLINES_URL + "?" + urlencode({"symbol": "BTCUSDT", "interval": interval, "limit": limit})
+    candles = []
+    for row in _get_json(url, timeout):
+        if len(row) < 6:
+            raise RuntimeError("Malformed candle response.")
+        candles.append(Candle(*(Decimal(str(row[k])) for k in (1, 2, 3, 4, 5))))
+    return candles
+
+
+def _gate_candles(interval, limit, timeout):
+    """Gate.io rows: [time, quote_vol, close, high, low, open, base_vol, closed]."""
+    url = GATE_KLINES_URL + "?" + urlencode({"currency_pair": "BTC_USDT", "interval": interval, "limit": limit})
+    candles = []
+    for row in _get_json(url, timeout):
+        if len(row) < 7:
+            raise RuntimeError("Malformed candle response.")
+        if len(row) > 7 and str(row[7]).lower() == "false":
+            continue  # skip the still-forming candle
+        candles.append(Candle(Decimal(str(row[5])), Decimal(str(row[3])), Decimal(str(row[4])),
+                              Decimal(str(row[2])), Decimal(str(row[6]))))
+    return candles
+
+
 def get_btcusdt_candles(interval: str = "1h", limit: int = 100, timeout: float = 5.0) -> list[Candle]:
+    """Binance first; if the host is blocked/unreachable (e.g. HTTP 451), use Gate.io BTC_USDT."""
     if interval not in {"15m", "1h", "4h"}: raise ValueError("Unsupported interval.")
     if not 20 <= limit <= 1000: raise ValueError("Candle limit must be between 20 and 1000.")
-    url = KLINES_URL + "?" + urlencode({"symbol":"BTCUSDT","interval":interval,"limit":limit})
-    request = Request(url, headers={"User-Agent":"btc-telegram-trader/1.0"})
-    with urlopen(request, timeout=timeout) as response:
-        if response.status != 200: raise RuntimeError(f"Market-data HTTP status: {response.status}")
-        payload = json.loads(response.read().decode("utf-8"))
-    candles=[]
-    for row in payload:
-        if len(row) < 6: raise RuntimeError("Malformed candle response.")
-        candles.append(Candle(Decimal(str(row[1])),Decimal(str(row[2])),Decimal(str(row[3])),Decimal(str(row[4])),Decimal(str(row[5]))))
+    try:
+        candles = _binance_candles(interval, limit, timeout)
+    except (HTTPError, URLError):
+        candles = _gate_candles(interval, limit, timeout)
     if len(candles) < 20: raise RuntimeError("Insufficient candle data.")
     return candles
