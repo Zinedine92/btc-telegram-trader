@@ -49,6 +49,12 @@ class BacktestTests(unittest.TestCase):
         self.assertAlmostEqual(s.max_drawdown_r, 2.0)
         self.assertAlmostEqual(s.profit_factor, 1.0)
 
+    def test_segment_stats_split_by_entry_bar(self):
+        T = backtest.Trade
+        trades = [T("LONG", 10, 12, 1.0, "target"), T("LONG", 60, 62, -1.0, "stop"), T("SHORT", 99, 100, 2.0, "target")]
+        seg = backtest.segment_stats(trades, 100, 4)
+        self.assertEqual([s.trades for s in seg], [1, 0, 1, 1])
+
     def test_full_run_on_synthetic_data_is_deterministic(self):
         c = backtest.synthetic_candles(1200, seed=3)
         a = backtest.summarize(backtest.run_backtest(c, strategy.analyze))

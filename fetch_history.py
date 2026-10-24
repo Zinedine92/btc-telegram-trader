@@ -55,6 +55,11 @@ def fetch(days, interval):
                 raise
             print("Binance unavailable, using Gate.io...", flush=True)
             page = gate_page
+            # Gate.io only serves the most recent ~10000 candles.
+            limit_start = end - 9990 * step_ms
+            if cur < limit_start:
+                print("Gate.io history limit: starting from the oldest available candle.", flush=True)
+                cur = limit_start
             continue
         for r in got:
             rows[r[0]] = r

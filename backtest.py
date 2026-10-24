@@ -5,7 +5,7 @@ signal is entered at the NEXT bar's open (+slippage); stop/target are checked
 from that bar onward. If a bar touches both stop and target the stop is assumed
 to hit first (conservative). Results are expressed in R multiples net of costs.
 
-Usage:  python backtest.py klines.csv [--compare]
+Usage:  python backtest.py klines.csv [--compare] [--split]   (--split: stats for 4 time slices)
 CSV: Binance kline layout (open_time, open, high, low, close, volume, ...) with
 or without a header row.
 """
@@ -146,6 +146,14 @@ def summarize(trades: Sequence[Trade]) -> Stats:
                  sum(t.side == "LONG" for t in trades), sum(t.side == "SHORT" for t in trades))
 
 
+def segment_stats(trades: Sequence[Trade], total_bars: int, segments: int) -> List[Stats]:
+    """Stats per equal slice of the data (by entry bar), to check consistency over time."""
+    buckets: List[List[Trade]] = [[] for _ in range(segments)]
+    for t in trades:
+        buckets[min(segments - 1, t.entry_index * segments // total_bars)].append(t)
+    return [summarize(b) for b in buckets]
+
+
 def format_stats(name: str, s: Stats) -> str:
     return (f"{name}: trades={s.trades} (L{s.longs}/S{s.shorts}) win={s.win_rate*100:.1f}% "
             f"avgR={s.avg_r:+.3f} PF={s.profit_factor:.2f} totalR={s.total_r:+.1f} maxDD={s.max_drawdown_r:.1f}R")
@@ -164,7 +172,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("Need at least 200 candles.")
         return 1
     import strategy, strategy_legacy
-    print(format_stats("v2    ", summarize(run_backtest(candles, strategy.analyze))))
+    v2_trades = run_backtest(candles, strategy.analyze)
+    print(format_stats("v2    ", summarize(v2_trades)))
+    if "--split" in argv:
+        for k, st in enumerate(segment_stats(v2_trades, len(candles), 4), 1):
+            print(format_stats(f"  part {k}/4", st))
     if "--compare" in argv:
         print(format_stats("legacy", summarize(run_backtest(candles, strategy_legacy.analyze))))
     print("Costs: fee 0.04%/side + slippage 0.02%/side. Past results do not predict future returns.")
