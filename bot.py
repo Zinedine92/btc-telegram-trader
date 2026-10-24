@@ -3,6 +3,7 @@
 Demo/analysis-only mode. No exchange orders are placed.
 """
 
+import functools
 import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -14,6 +15,7 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Cont
 
 from binance_balance import get_btc_usdt_balances
 from binance_readonly_client import describe_http_error
+import access
 import market_data
 from market_data import get_btcusdt_price, get_btcusdt_candles
 from strategy import analyze
@@ -54,6 +56,30 @@ def start_health_server():
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     print(f"Health server listening on 0.0.0.0:{port}")
+
+
+def owner_only(handler):
+    """Run the handler only for Telegram user IDs listed in ALLOWED_USER_IDS."""
+    @functools.wraps(handler)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        if not access.is_authorized(user.id if user else None):
+            if update.callback_query:
+                await update.callback_query.answer("Unauthorized", show_alert=True)
+            elif update.message:
+                await update.message.reply_text(
+                    "⛔ Unauthorized. This bot is private.\n"
+                    "Send /myid to get your Telegram ID, then set ALLOWED_USER_IDS on the server."
+                )
+            return
+        await handler(update, context)
+    return wrapper
+
+
+async def myid_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Reveals only the sender's own numeric Telegram ID (needed to set the allowlist)."""
+    user = update.effective_user
+    await update.message.reply_text(f"Your Telegram ID: {user.id if user else 'unknown'}")
 
 
 def build_keyboard():
@@ -253,6 +279,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def post_init(application: Application):
     commands = [
         BotCommand("start", "Start the bot"),
+        BotCommand("myid", "Show your Telegram ID"),
         BotCommand("status", "Show bot status"),
         BotCommand("balance", "Show BTC/USDT balance (read-only)"),
         BotCommand("diag", "Check safe runtime configuration"),
@@ -275,14 +302,15 @@ def main(*, embedded=False):
     if not embedded:
         start_health_server()
     app = Application.builder().token(token).post_init(post_init).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("status", status))
-    app.add_handler(CommandHandler("balance", balance_command))
-    app.add_handler(CommandHandler("diag", diag_command))
-    app.add_handler(CommandHandler("price", price_command))
-    app.add_handler(CommandHandler("analysis", analysis_command))
-    app.add_handler(CommandHandler("riskcheck", riskcheck_command))
-    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(CommandHandler("start", owner_only(start)))
+    app.add_handler(CommandHandler("status", owner_only(status)))
+    app.add_handler(CommandHandler("balance", owner_only(balance_command)))
+    app.add_handler(CommandHandler("diag", owner_only(diag_command)))
+    app.add_handler(CommandHandler("price", owner_only(price_command)))
+    app.add_handler(CommandHandler("analysis", owner_only(analysis_command)))
+    app.add_handler(CommandHandler("riskcheck", owner_only(riskcheck_command)))
+    app.add_handler(CommandHandler("myid", myid_command))
+    app.add_handler(CallbackQueryHandler(owner_only(button_handler)))
     print("BTC Telegram Bot V1 started in DEMO mode...")
     # Passenger starts this from a background thread, where signal handlers are unavailable.
     if embedded:
