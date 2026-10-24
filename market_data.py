@@ -20,8 +20,10 @@ def get_btcusdt_price(timeout: float = 5.0) -> PriceResult:
             if response.status != 200:
                 raise RuntimeError(f"Market-data HTTP status: {response.status}")
             payload = json.loads(response.read().decode("utf-8"))
+        _set_source("Binance")
     except (HTTPError, URLError):
         # Binance blocked/unreachable: Gate.io BTC_USDT public ticker.
+        _set_source("Gate.io")
         rows = _get_json(GATE_TICKER_URL, timeout)
         if not rows or "last" not in rows[0]:
             raise RuntimeError("Invalid fallback price response.")
@@ -51,7 +53,13 @@ class Candle:
 
 GATE_KLINES_URL = "https://api.gateio.ws/api/v4/spot/candlesticks"
 GATE_TICKER_URL = "https://api.gateio.ws/api/v4/spot/tickers?currency_pair=BTC_USDT"
+LAST_SOURCE = "Binance"   # which public source served the latest request
 _HEADERS = {"User-Agent": "Mozilla/5.0 btc-telegram-trader/1.0"}
+
+
+def _set_source(name: str) -> None:
+    global LAST_SOURCE
+    LAST_SOURCE = name
 
 
 def _get_json(url: str, timeout: float):
@@ -91,7 +99,9 @@ def get_btcusdt_candles(interval: str = "1h", limit: int = 100, timeout: float =
     if not 20 <= limit <= 1000: raise ValueError("Candle limit must be between 20 and 1000.")
     try:
         candles = _binance_candles(interval, limit, timeout)
+        _set_source("Binance")
     except (HTTPError, URLError):
         candles = _gate_candles(interval, limit, timeout)
+        _set_source("Gate.io")
     if len(candles) < 20: raise RuntimeError("Insufficient candle data.")
     return candles
