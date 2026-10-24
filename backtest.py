@@ -5,7 +5,7 @@ signal is entered at the NEXT bar's open (+slippage); stop/target are checked
 from that bar onward. If a bar touches both stop and target the stop is assumed
 to hit first (conservative). Results are expressed in R multiples net of costs.
 
-Usage:  python backtest.py klines.csv [--compare] [--split] [--factors]   (--split: stats for 4 time slices)
+Usage:  python backtest.py klines.csv [--compare] [--split] [--factors] [--htf N]   (--htf 6: higher timeframe = 6 candles, e.g. 4h->1d)   (--split: stats for 4 time slices)
 CSV: Binance kline layout (open_time, open, high, low, close, volume, ...) with
 or without a header row.
 """
@@ -87,15 +87,31 @@ def _r_net(side: str, entry: float, stop: float, exit_price: float) -> float:
     return (gross - cost) / risk
 
 
+def resample(candles: Sequence[Candle], factor: int) -> List[Candle]:
+    """Merge `factor` consecutive candles into one, aligned so the LAST group ends
+    at the final input candle (it only contains data up to now: no look-ahead)."""
+    out: List[Candle] = []
+    n = len(candles)
+    start = n % factor
+    for i in range(start, n, factor):
+        grp = candles[i:i + factor]
+        out.append(Candle(grp[0].open, max(c.high for c in grp), min(c.low for c in grp),
+                          grp[-1].close, sum((c.volume for c in grp), Decimal(0))))
+    return out
+
+
 def run_backtest(candles: Sequence[Candle], analyze: Callable, equity: float = 10000.0,
-                 use_risk_gate: bool = True, warmup: int = 100) -> List[Trade]:
+                 use_risk_gate: bool = True, warmup: int = 100, htf_factor: int = 0) -> List[Trade]:
     trades: List[Trade] = []
     i = warmup
     n = len(candles)
+    win = max(WINDOW, 60 * htf_factor) if htf_factor else WINDOW
+    warmup = max(warmup, 60 * htf_factor) if htf_factor else warmup
+    i = warmup
     while i < n - 1:
-        window = candles[max(0, i + 1 - WINDOW): i + 1]
+        window = candles[max(0, i + 1 - win): i + 1]
         try:
-            a = analyze(window)
+            a = analyze(window, htf_candles=resample(window, htf_factor)) if htf_factor else analyze(window)
         except ValueError:
             i += 1
             continue
@@ -194,7 +210,8 @@ def format_stats(name: str, s: Stats) -> str:
 
 def main(argv: Optional[List[str]] = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    paths = [a for a in argv if not a.startswith("--")]
+    htf = int(argv[argv.index("--htf") + 1]) if "--htf" in argv else 0
+    paths = [a for a in argv if not a.startswith("--") and a != str(htf)]
     if paths:
         candles = load_csv(paths[0])
         print(f"Loaded {len(candles)} candles from {paths[0]}")
@@ -205,7 +222,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("Need at least 200 candles.")
         return 1
     import strategy, strategy_legacy
-    v2_trades = run_backtest(candles, strategy.analyze)
+    v2_trades = run_backtest(candles, strategy.analyze, htf_factor=htf)
     print(format_stats("v2    ", summarize(v2_trades)))
     if "--split" in argv:
         for k, st in enumerate(segment_stats(v2_trades, len(candles), 4), 1):
