@@ -42,21 +42,34 @@ def describe_http_error(exc):
     return text
 
 
-def get_account_info(opener=urlopen):
-    """Fetch authenticated account info from Binance TESTNET by default."""
+# Hard allowlist: this client can only call these read-only GET endpoints.
+ALLOWED_PATHS = frozenset({"/api/v3/account", "/api/v3/openOrders"})
+
+
+def signed_get(path, params=None, opener=urlopen):
+    """Signed GET to an allowlisted read-only endpoint; returns the raw JSON text."""
+    if path not in ALLOWED_PATHS:
+        raise ValueError("Endpoint is not allowed in the read-only client.")
     api_key, api_secret = get_binance_credentials()
     base_url = get_binance_base_url()
 
-    params = {
-        "timestamp": int(time.time() * 1000),
-        "recvWindow": 5000,
-    }
-    query = _signed_query(params, api_secret)
+    query_params = dict(params or {})
+    query_params.update({"timestamp": int(time.time() * 1000), "recvWindow": 5000})
+    query = _signed_query(query_params, api_secret)
     request = Request(
-        f"{base_url}/api/v3/account?{query}",
+        f"{base_url}{path}?{query}",
         headers={"X-MBX-APIKEY": api_key},
         method="GET",
     )
-
     with opener(request, timeout=10) as response:
         return response.read().decode("utf-8")
+
+
+def get_account_info(opener=urlopen):
+    """Fetch authenticated account info from Binance TESTNET by default."""
+    return signed_get("/api/v3/account", opener=opener)
+
+
+def get_open_orders(opener=urlopen):
+    """List currently open Spot orders (read-only)."""
+    return signed_get("/api/v3/openOrders", opener=opener)
