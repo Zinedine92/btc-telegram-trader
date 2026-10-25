@@ -1,0 +1,21 @@
+[Unit]
+Description=BTC Telegram analysis bot (read-only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=botuser
+WorkingDirectory=/opt/btc-bot
+ExecStart=/opt/btc-bot/venv/bin/python bot.py
+Restart=always
+RestartSec=15
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/btc-bot
+
+[Install]
+WantedBy=multi-user.target
