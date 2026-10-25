@@ -3,6 +3,7 @@
 Demo/analysis-only mode. No exchange orders are placed.
 """
 
+import asyncio
 import functools
 import os
 import threading
@@ -16,6 +17,7 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Cont
 from binance_balance import get_btc_usdt_balances
 from binance_readonly_client import describe_http_error
 import access
+import dashboard
 import market_data
 from market_data import get_btcusdt_price, get_btcusdt_candles
 from strategy import analyze
@@ -134,6 +136,64 @@ async def diag_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Only variable presence is checked; secret values are never shown. "
         "No Binance request or order is made."
     )
+
+
+def panel_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("💰 Portfolio", callback_data="panel_portfolio"),
+         InlineKeyboardButton("📋 Open orders", callback_data="panel_orders")],
+        [InlineKeyboardButton("📈 Analysis", callback_data="panel_analysis"),
+         InlineKeyboardButton("📊 Price", callback_data="panel_price")],
+    ])
+
+
+def _panel_error_text(exc):
+    """Secret-free explanation of why a Binance read failed."""
+    if isinstance(exc, HTTPError):
+        detail = describe_http_error(exc)
+        hint = ("\nBinance blocks this server's region. Run the bot from an allowed country."
+                if exc.code == 451 else "")
+        return f"⚠️ Binance returned {detail}.{hint}\nNo order was placed."
+    if isinstance(exc, RuntimeError):
+        return "⚠️ Binance configuration/credentials problem. Check /diag.\nNo order was placed."
+    return f"⚠️ Unavailable: {type(exc).__name__}.\nNo order was placed."
+
+
+async def panel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🎛 CONTROL PANEL\n\nRead-only view of your Binance Spot account and the strategy.\n"
+        "No trading from this bot.",
+        reply_markup=panel_keyboard(),
+    )
+
+
+async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    action = query.data
+    try:
+        if action == "panel_portfolio":
+            rows, total = await asyncio.to_thread(dashboard.fetch_portfolio)
+            text = dashboard.format_portfolio(rows, total)
+        elif action == "panel_orders":
+            orders = await asyncio.to_thread(dashboard.fetch_open_orders)
+            text = dashboard.format_open_orders(orders)
+        elif action == "panel_price":
+            result = await asyncio.to_thread(get_btcusdt_price)
+            text = (f"📊 BTC/USDT\n\nPrice: {result.price} USDT\n"
+                    f"Source: {market_data.LAST_SOURCE} public market data")
+        elif action == "panel_analysis":
+            candles = await asyncio.to_thread(get_btcusdt_candles, "1h", 200)
+            r = analyze(candles)
+            text = (f"🟡 ANALYSIS: NO TRADE\n{r.reason}" if r.bias == "NO_TRADE" else
+                    f"📈 ANALYSIS: {r.bias} (score {r.score:.0f}/100)\nEntry {r.entry}  Stop {r.stop_loss}  Target {r.take_profit}\n"
+                    "⚠️ Analysis only.")
+        else:
+            text = "Unknown panel action."
+    except Exception as exc:
+        print("Panel action failed:", action, type(exc).__name__)
+        text = _panel_error_text(exc)
+    await query.edit_message_text(text, reply_markup=panel_keyboard())
 
 
 async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -281,6 +341,7 @@ async def post_init(application: Application):
         BotCommand("start", "Start the bot"),
         BotCommand("myid", "Show your Telegram ID"),
         BotCommand("status", "Show bot status"),
+        BotCommand("panel", "Open the read-only control panel"),
         BotCommand("balance", "Show BTC/USDT balance (read-only)"),
         BotCommand("diag", "Check safe runtime configuration"),
         BotCommand("price", "Show BTC/USDT price"),
@@ -309,7 +370,9 @@ def main(*, embedded=False):
     app.add_handler(CommandHandler("price", owner_only(price_command)))
     app.add_handler(CommandHandler("analysis", owner_only(analysis_command)))
     app.add_handler(CommandHandler("riskcheck", owner_only(riskcheck_command)))
+    app.add_handler(CommandHandler("panel", owner_only(panel_command)))
     app.add_handler(CommandHandler("myid", myid_command))
+    app.add_handler(CallbackQueryHandler(owner_only(panel_callback), pattern="^panel_"))
     app.add_handler(CallbackQueryHandler(owner_only(button_handler)))
     print("BTC Telegram Bot V1 started in DEMO mode...")
     # Passenger starts this from a background thread, where signal handlers are unavailable.
